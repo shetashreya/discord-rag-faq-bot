@@ -1,0 +1,9 @@
+discord.py
+python-dotenv
+langchain-community
+langchain-qdrant
+langchain-text-splitters
+langchain-ollama
+qdrant-client
+ollama
+pypdf
