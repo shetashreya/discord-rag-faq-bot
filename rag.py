@@ -1,7 +1,6 @@
 import os
 from langchain_ollama import OllamaEmbeddings
 from qdrant_client import QdrantClient
-from qdrant_client.models import PointStruct
 import ollama
 from dotenv import load_dotenv
 
@@ -17,41 +16,36 @@ embeddings = OllamaEmbeddings(model="mxbai-embed-large")
 
 def answer_question(question: str) -> str:
     try:
-        # Get embedding for the question
-        question_embedding = embeddings.embed_query(question)
+       
+        question_vector = embeddings.embed_query(question)
         
-        # Search in Qdrant using scroll to get all points first
-        points, _ = client.scroll(
+        
+        search_results = client.query_points(
             collection_name=collection_name,
-            limit=100
+            query=question_vector,
+            limit=3,
+            with_payload=True
         )
         
-        if not points:
-            return "I don't know. This information is not in the provided documents."
+       
+        if not search_results or not search_results.points:
+            return "I don't know."
         
-        # For now, let's just use the first few documents
-        # In a production system, you'd implement proper similarity search
-        context_parts = []
-        for point in points[:3]:  # Take first 3 documents
-            if hasattr(point, 'payload') and 'page_content' in point.payload:
-                content = point.payload['page_content']
-                if question.lower() in content.lower():  # Simple keyword matching
-                    context_parts.append(content)
+       
+        context_chunks = []
+        for point in search_results.points:
+            if point.payload and "page_content" in point.payload:
+                context_chunks.append(point.payload["page_content"])
         
-        # If no keyword matches, use first few documents
-        if not context_parts:
-            for point in points[:3]:
-                if hasattr(point, 'payload') and 'page_content' in point.payload:
-                    context_parts.append(point.payload['page_content'])
         
-        context = "\n\n".join(context_parts)
+        if not context_chunks:
+            return "I don't know."
         
-        if not context.strip():
-            return "I don't know. This information is not in the provided documents."
-
-        prompt = f"""You are an AI assistant for the AI Bootcamp.
-Answer ONLY using the context below.
-If the answer is not present, say you do not know.
+        
+        context = "\n\n".join(context_chunks)
+        
+        
+        prompt = f"""Based on the provided context, answer the question directly. If you can reasonably infer the answer from the context, provide it. Only respond with "I don't know" if the context contains no relevant information.
 
 Context:
 {context}
@@ -69,4 +63,4 @@ Answer:"""
         
     except Exception as e:
         print(f"Error in answer_question: {e}")
-        return f"Error: {str(e)}"
+        return "I don't know."
